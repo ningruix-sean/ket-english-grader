@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import SubmissionTable from '@/components/SubmissionTable'
+import ProgressChart from '@/components/ProgressChart'
 
 // ── Login screen ─────────────────────────────────────────────────────────────
 
@@ -54,9 +55,7 @@ function LoginScreen({ onLogin }) {
               required
             />
           </div>
-          {error && (
-            <p className="text-red-500 text-sm text-center">{error}</p>
-          )}
+          {error && <p className="text-red-500 text-sm text-center">{error}</p>}
           <button
             type="submit"
             disabled={loading || !password}
@@ -73,10 +72,28 @@ function LoginScreen({ onLogin }) {
   )
 }
 
+// ── Part type config ──────────────────────────────────────────────────────────
+
+const PART_TYPE_OPTIONS = [
+  { value: 'free',  label: '自由练习',       desc: '综合口语，不限题型' },
+  { value: 'part1', label: 'Part 1 — 问答对话', desc: '日常问答，侧重流利度' },
+  { value: 'part2', label: 'Part 2 — 情景对话', desc: '信息交换，侧重交际能力' },
+  { value: 'part3', label: 'Part 3 — 看图描述', desc: '图片描述，侧重词汇描述' },
+]
+
+const PART_TYPE_BADGE = {
+  part1: { label: 'Part 1',    color: 'bg-blue-50 text-blue-600' },
+  part2: { label: 'Part 2',    color: 'bg-purple-50 text-purple-600' },
+  part3: { label: 'Part 3',    color: 'bg-amber-50 text-amber-600' },
+  free:  { label: '自由练习',  color: 'bg-gray-100 text-gray-500' },
+}
+
 // ── Assignment modal ──────────────────────────────────────────────────────────
 
 function AssignmentModal({ token, onClose, onSaved }) {
-  const [form, setForm] = useState({ title: '', description: '', reference_text: '', class_name: '' })
+  const [form, setForm] = useState({
+    title: '', description: '', reference_text: '', class_name: '', part_type: 'free',
+  })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -103,8 +120,8 @@ function AssignmentModal({ token, onClose, onSaved }) {
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl">
-        <div className="flex items-center justify-between p-5 border-b border-gray-100">
+      <div className="bg-white rounded-3xl w-full max-w-lg shadow-2xl max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 sticky top-0 bg-white rounded-t-3xl">
           <h2 className="text-lg font-bold text-gray-800">新建作业</h2>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100">✕</button>
         </div>
@@ -120,6 +137,39 @@ function AssignmentModal({ token, onClose, onSaved }) {
               required
             />
           </div>
+
+          {/* Part type selector */}
+          <div>
+            <label className="block text-sm font-medium text-gray-600 mb-2">题目类型</label>
+            <div className="grid grid-cols-2 gap-2">
+              {PART_TYPE_OPTIONS.map(opt => (
+                <label
+                  key={opt.value}
+                  className={`flex items-start gap-2.5 p-3 rounded-xl border-2 cursor-pointer transition-all ${
+                    form.part_type === opt.value
+                      ? 'border-blue-400 bg-blue-50'
+                      : 'border-gray-100 bg-gray-50 hover:border-gray-200'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="part_type"
+                    value={opt.value}
+                    checked={form.part_type === opt.value}
+                    onChange={() => setForm(f => ({ ...f, part_type: opt.value }))}
+                    className="mt-0.5 accent-blue-500"
+                  />
+                  <div>
+                    <p className={`text-xs font-semibold ${form.part_type === opt.value ? 'text-blue-700' : 'text-gray-700'}`}>
+                      {opt.label}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">{opt.desc}</p>
+                  </div>
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-600 mb-1">题目说明</label>
             <textarea
@@ -166,6 +216,108 @@ function AssignmentModal({ token, onClose, onSaved }) {
   )
 }
 
+// ── Student progress panel (teacher side) ─────────────────────────────────────
+
+function StudentProgressPanel() {
+  const [searchName, setSearchName] = useState('')
+  const [history, setHistory] = useState(null) // null = not searched yet
+  const [loading, setLoading] = useState(false)
+
+  function handleSearch(e) {
+    e.preventDefault()
+    if (!searchName.trim()) return
+    setLoading(true)
+    setHistory(null)
+    fetch(`/api/student-history?name=${encodeURIComponent(searchName.trim())}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setHistory(Array.isArray(data) ? data : []))
+      .catch(() => setHistory([]))
+      .finally(() => setLoading(false))
+  }
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
+      <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+        <span>📈</span> 学生进步追踪
+      </h3>
+      <form onSubmit={handleSearch} className="flex gap-2">
+        <input
+          type="text"
+          value={searchName}
+          onChange={e => setSearchName(e.target.value)}
+          placeholder="输入学生姓名…"
+          className="flex-1 px-3 py-2 text-sm border border-gray-200 rounded-lg focus:border-blue-400 outline-none"
+        />
+        <button
+          type="submit"
+          disabled={loading || !searchName.trim()}
+          className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-200 text-white text-sm font-medium rounded-lg transition"
+        >
+          {loading ? '查询中…' : '查询'}
+        </button>
+      </form>
+
+      {loading && <p className="text-sm text-gray-400 text-center py-4">加载中…</p>}
+
+      {history !== null && !loading && (
+        <>
+          {history.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-4">未找到"{searchName}"的提交记录</p>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-gray-500">
+                {searchName} · 共 {history.length} 次提交
+              </p>
+              {/* Score summary table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-gray-400 border-b border-gray-100">
+                      <th className="text-left py-1.5 font-medium">日期</th>
+                      <th className="text-left py-1.5 font-medium">作业</th>
+                      <th className="text-center py-1.5 font-medium">发音</th>
+                      <th className="text-center py-1.5 font-medium">流利</th>
+                      <th className="text-center py-1.5 font-medium">语法</th>
+                      <th className="text-center py-1.5 font-medium">内容</th>
+                      <th className="text-center py-1.5 font-medium">总分</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map(h => {
+                      const sc = h.overall_score
+                      const badge = sc >= 90 ? 'text-emerald-600 font-bold' :
+                                    sc >= 75 ? 'text-blue-600 font-bold' :
+                                    sc >= 60 ? 'text-yellow-600 font-bold' :
+                                               'text-red-500 font-bold'
+                      return (
+                        <tr key={h.id} className="border-b border-gray-50 hover:bg-gray-50">
+                          <td className="py-1.5 text-gray-500">
+                            {new Date(h.submitted_at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}
+                          </td>
+                          <td className="py-1.5 text-blue-500 truncate max-w-[100px]">
+                            {h.assignment_title || '—'}
+                          </td>
+                          <td className="py-1.5 text-center text-gray-600">{h.pronunciation_score}</td>
+                          <td className="py-1.5 text-center text-gray-600">{h.fluency_score}</td>
+                          <td className="py-1.5 text-center text-gray-600">{h.grammar_score}</td>
+                          <td className="py-1.5 text-center text-gray-600">{h.content_score}</td>
+                          <td className={`py-1.5 text-center ${badge}`}>{sc}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {/* Progress chart */}
+              <ProgressChart history={history} height={200} />
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Main dashboard ────────────────────────────────────────────────────────────
 
 export default function TeacherPage() {
@@ -175,7 +327,7 @@ export default function TeacherPage() {
   const [assignments, setAssignments] = useState([])
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(false)
-  const [tab, setTab] = useState('submissions') // submissions | assignments
+  const [tab, setTab] = useState('submissions') // submissions | assignments | progress
   const [showModal, setShowModal] = useState(false)
   const [filters, setFilters] = useState({ class_name: '', date_from: '', date_to: '', min_score: '', max_score: '' })
   const [exporting, setExporting] = useState(false)
@@ -303,10 +455,11 @@ export default function TeacherPage() {
         )}
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+        <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit flex-wrap">
           {[
-            { key: 'submissions', label: '📋 提交记录' },
-            { key: 'assignments', label: '📝 作业管理' },
+            { key: 'submissions',  label: '📋 提交记录' },
+            { key: 'assignments',  label: '📝 作业管理' },
+            { key: 'progress',     label: '📈 进步追踪' },
           ].map(t => (
             <button
               key={t.key}
@@ -320,7 +473,7 @@ export default function TeacherPage() {
           ))}
         </div>
 
-        {/* Submissions tab */}
+        {/* ── Submissions tab ───────────────────────────────────────── */}
         {tab === 'submissions' && (
           <div className="space-y-4">
             {/* Filters */}
@@ -402,15 +555,13 @@ export default function TeacherPage() {
 
             {/* Table */}
             <div>
-              <p className="text-sm text-gray-500 mb-3">
-                共 {submissions.length} 条记录
-              </p>
+              <p className="text-sm text-gray-500 mb-3">共 {submissions.length} 条记录</p>
               <SubmissionTable submissions={submissions} onRefresh={fetchSubmissions} />
             </div>
           </div>
         )}
 
-        {/* Assignments tab */}
+        {/* ── Assignments tab ───────────────────────────────────────── */}
         {tab === 'assignments' && (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -430,39 +581,50 @@ export default function TeacherPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {assignments.map(a => (
-                  <div key={a.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="font-semibold text-gray-800">{a.title}</h3>
-                          {a.class_name && (
-                            <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{a.class_name}</span>
+                {assignments.map(a => {
+                  const ptBadge = PART_TYPE_BADGE[a.part_type] || PART_TYPE_BADGE.free
+                  return (
+                    <div key={a.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h3 className="font-semibold text-gray-800">{a.title}</h3>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ptBadge.color}`}>
+                              {ptBadge.label}
+                            </span>
+                            {a.class_name && (
+                              <span className="text-xs bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full">{a.class_name}</span>
+                            )}
+                            {!a.active && (
+                              <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">已停用</span>
+                            )}
+                          </div>
+                          {a.description && <p className="text-sm text-gray-500 mt-1">{a.description}</p>}
+                          {a.reference_text && (
+                            <p className="text-xs text-gray-400 mt-1 truncate">📖 {a.reference_text}</p>
                           )}
-                          {!a.active && (
-                            <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">已停用</span>
-                          )}
+                          <p className="text-xs text-gray-300 mt-2">
+                            {new Date(a.created_at).toLocaleDateString('zh-CN')}
+                          </p>
                         </div>
-                        {a.description && <p className="text-sm text-gray-500 mt-1">{a.description}</p>}
-                        {a.reference_text && (
-                          <p className="text-xs text-gray-400 mt-1 truncate">📖 {a.reference_text}</p>
-                        )}
-                        <p className="text-xs text-gray-300 mt-2">
-                          {new Date(a.created_at).toLocaleDateString('zh-CN')}
-                        </p>
+                        <button
+                          onClick={() => handleDeleteAssignment(a.id)}
+                          className="shrink-0 text-gray-300 hover:text-red-400 transition text-sm"
+                        >
+                          🗑️
+                        </button>
                       </div>
-                      <button
-                        onClick={() => handleDeleteAssignment(a.id)}
-                        className="shrink-0 text-gray-300 hover:text-red-400 transition text-sm"
-                      >
-                        🗑️
-                      </button>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </div>
+        )}
+
+        {/* ── Progress tab ──────────────────────────────────────────── */}
+        {tab === 'progress' && (
+          <StudentProgressPanel />
         )}
       </main>
 

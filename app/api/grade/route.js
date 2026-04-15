@@ -67,20 +67,22 @@ export async function POST(request) {
       )
     }
 
-    // 2. Get reference text if assignment selected
+    // 2. Get reference text and part type if assignment selected
     let referenceText = null
+    let partType = null
     if (assignmentId) {
       try {
         const assignments = getActiveAssignments()
         const assignment = assignments.find(a => a.id === Number(assignmentId))
         referenceText = assignment?.reference_text || null
+        partType = assignment?.part_type || null
       } catch { /* non-critical */ }
     }
 
     // 3. Grade with GPT-4o
     let gradeResult
     try {
-      gradeResult = await gradeSubmission(transcript, referenceText)
+      gradeResult = await gradeSubmission(transcript, referenceText, partType)
     } catch (err) {
       console.error('GPT-4o grading error:', err)
       return NextResponse.json(
@@ -106,6 +108,7 @@ export async function POST(request) {
         feedback_en:         gradeResult.feedback_en,
         feedback_cn:         gradeResult.feedback_cn,
         corrections:         gradeResult.corrections,
+        practice_suggestions: gradeResult.practice_suggestions,
       })
     } catch (err) {
       console.error('DB save error:', err)

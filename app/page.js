@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import AudioRecorder from '@/components/AudioRecorder'
 import GradeReport from '@/components/GradeReport'
+import ProgressChart from '@/components/ProgressChart'
 
 const STEPS = [
   { key: 'uploading',    label: '上传音频…',   icon: '⬆️' },
@@ -10,6 +11,13 @@ const STEPS = [
   { key: 'grading',      label: 'AI 评分中…',  icon: '🤖' },
   { key: 'done',         label: '评分完成！',  icon: '✅' },
 ]
+
+const PART_TYPE_LABELS = {
+  part1: { label: 'Part 1 — 问答对话', icon: '🗣️', desc: '侧重流利度和自然度，回答日常生活问题' },
+  part2: { label: 'Part 2 — 情景对话', icon: '💬', desc: '侧重交际能力，完成信息交换任务' },
+  part3: { label: 'Part 3 — 看图描述', icon: '🖼️', desc: '侧重描述能力和词汇，描述图片并展开讨论' },
+  free:  { label: '自由练习',          icon: '🎯', desc: '综合口语练习，不限定特定题型' },
+}
 
 function ProgressBar({ step }) {
   const idx = STEPS.findIndex(s => s.key === step)
@@ -36,6 +44,112 @@ function ProgressBar({ step }) {
     </div>
   )
 }
+
+// ── Student history section ──────────────────────────────────────────────────
+
+function StudentHistorySection({ studentName }) {
+  const [history, setHistory] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [tab, setTab] = useState('records') // records | chart
+
+  useEffect(() => {
+    if (!studentName || studentName.trim().length < 1) {
+      setHistory([])
+      return
+    }
+    setLoading(true)
+    const timer = setTimeout(() => {
+      fetch(`/api/student-history?name=${encodeURIComponent(studentName.trim())}`)
+        .then(r => r.ok ? r.json() : [])
+        .then(data => {
+          setHistory(Array.isArray(data) ? data : [])
+          setTab('records')
+        })
+        .catch(() => setHistory([]))
+        .finally(() => setLoading(false))
+    }, 600)
+    return () => clearTimeout(timer)
+  }, [studentName])
+
+  if (!studentName.trim()) return null
+  if (!loading && history.length === 0) return null
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+          <span>📈</span> 我的历史记录
+          {history.length > 0 && (
+            <span className="text-xs text-gray-400 font-normal">（共 {history.length} 次）</span>
+          )}
+        </h3>
+        {history.length >= 2 && (
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-lg">
+            <button
+              onClick={() => setTab('records')}
+              className={`px-3 py-1 rounded text-xs font-medium transition ${tab === 'records' ? 'bg-white text-gray-700 shadow-sm' : 'text-gray-500'}`}
+            >
+              记录
+            </button>
+            <button
+              onClick={() => setTab('chart')}
+              className={`px-3 py-1 rounded text-xs font-medium transition ${tab === 'chart' ? 'bg-white text-gray-700 shadow-sm' : 'text-gray-500'}`}
+            >
+              趋势图
+            </button>
+          </div>
+        )}
+      </div>
+
+      {loading && (
+        <p className="text-center text-sm text-gray-400 py-4">加载中…</p>
+      )}
+
+      {!loading && tab === 'records' && (
+        <div className="space-y-1 max-h-60 overflow-y-auto pr-1">
+          {/* Header */}
+          <div className="grid grid-cols-[1fr_auto] gap-2 px-1 pb-1 text-xs font-semibold text-gray-400">
+            <span>日期 · 作业</span>
+            <span className="text-right">发音/流利/语法/内容 · 总分</span>
+          </div>
+          {history.map(h => {
+            const sc = h.overall_score
+            const badge = sc >= 90 ? 'bg-emerald-100 text-emerald-700' :
+                          sc >= 75 ? 'bg-blue-100 text-blue-700' :
+                          sc >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                                     'bg-red-100 text-red-600'
+            return (
+              <div key={h.id} className="grid grid-cols-[1fr_auto] gap-2 items-center py-1.5 border-b border-gray-50 last:border-0">
+                <div className="min-w-0">
+                  <p className="text-xs text-gray-500 truncate">
+                    {new Date(h.submitted_at).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' })}
+                    {h.assignment_title && <span className="ml-1 text-blue-400">· {h.assignment_title}</span>}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0 text-xs text-gray-400">
+                  <span>{h.pronunciation_score}</span>
+                  <span className="text-gray-200">/</span>
+                  <span>{h.fluency_score}</span>
+                  <span className="text-gray-200">/</span>
+                  <span>{h.grammar_score}</span>
+                  <span className="text-gray-200">/</span>
+                  <span>{h.content_score}</span>
+                  <span className={`ml-1.5 px-2 py-0.5 rounded-full font-bold text-xs ${badge}`}>{sc}</span>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {!loading && tab === 'chart' && (
+        <ProgressChart history={history} height={200} />
+      )}
+    </div>
+  )
+}
+
+// ── Main page ────────────────────────────────────────────────────────────────
 
 export default function StudentPage() {
   const [studentName, setStudentName] = useState('')
@@ -107,7 +221,6 @@ export default function StudentPage() {
         formData.append('audio', uploadedFile, uploadedFile.name)
       }
 
-      // Simulate progressive steps during fetch
       const stepTimer = setTimeout(() => setProgressStep('transcribing'), 1500)
       const stepTimer2 = setTimeout(() => setProgressStep('grading'), 4000)
 
@@ -141,6 +254,9 @@ export default function StudentPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
+  // Currently selected assignment object
+  const selectedAssignmentObj = assignments.find(x => x.id === Number(selectedAssignment))
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-slate-50">
       {/* Header */}
@@ -150,10 +266,7 @@ export default function StudentPage() {
             <h1 className="text-lg font-bold text-blue-600">🎙️ KET 口语练习</h1>
             <p className="text-xs text-gray-400">智能评分系统</p>
           </div>
-          <a
-            href="/teacher"
-            className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-          >
+          <a href="/teacher" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
             教师登录
           </a>
         </div>
@@ -224,14 +337,27 @@ export default function StudentPage() {
                     ))}
                   </select>
 
-                  {selectedAssignment && (() => {
-                    const a = assignments.find(x => x.id === Number(selectedAssignment))
-                    return a?.reference_text ? (
-                      <div className="mt-2 bg-blue-50 rounded-xl p-3 text-sm text-blue-700">
-                        <p className="font-medium mb-1">📖 题目内容：</p>
-                        <p className="leading-relaxed">{a.reference_text}</p>
+                  {selectedAssignmentObj && (() => {
+                    const ptInfo = PART_TYPE_LABELS[selectedAssignmentObj.part_type] || PART_TYPE_LABELS.free
+                    return (
+                      <div className="mt-2 space-y-2">
+                        {/* Part type badge */}
+                        <div className="flex items-center gap-2 bg-indigo-50 rounded-xl px-3 py-2">
+                          <span className="text-base">{ptInfo.icon}</span>
+                          <div className="min-w-0">
+                            <span className="text-sm font-semibold text-indigo-700">{ptInfo.label}</span>
+                            <p className="text-xs text-indigo-400 mt-0.5">{ptInfo.desc}</p>
+                          </div>
+                        </div>
+                        {/* Reference text */}
+                        {selectedAssignmentObj.reference_text && (
+                          <div className="bg-blue-50 rounded-xl p-3 text-sm text-blue-700">
+                            <p className="font-medium mb-1">📖 题目内容：</p>
+                            <p className="leading-relaxed">{selectedAssignmentObj.reference_text}</p>
+                          </div>
+                        )}
                       </div>
-                    ) : null
+                    )
                   })()}
                 </div>
               )}
@@ -241,7 +367,6 @@ export default function StudentPage() {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
               <h3 className="font-semibold text-gray-700">🎤 录制或上传音频</h3>
 
-              {/* Browser recording */}
               <div>
                 <p className="text-xs text-gray-500 mb-2">方式一：直接录音</p>
                 <AudioRecorder
@@ -256,7 +381,6 @@ export default function StudentPage() {
                 <div className="flex-1 h-px bg-gray-100" />
               </div>
 
-              {/* File upload */}
               <div>
                 <p className="text-xs text-gray-500 mb-2">方式二：上传音频文件</p>
                 <label className={`flex flex-col items-center justify-center gap-2 w-full py-5 px-4 border-2 border-dashed rounded-2xl cursor-pointer transition-colors
@@ -321,6 +445,11 @@ export default function StudentPage() {
           </form>
         )}
 
+        {/* ── Student history section (always visible once name entered) ── */}
+        {!result && (
+          <StudentHistorySection studentName={studentName} />
+        )}
+
         {/* Results */}
         {result && (
           <div ref={resultRef} className="space-y-4 animate-fade-in">
@@ -338,6 +467,8 @@ export default function StudentPage() {
               studentName={studentName}
               className={className}
             />
+            {/* Show updated history after submission */}
+            <StudentHistorySection studentName={studentName} />
           </div>
         )}
       </main>
