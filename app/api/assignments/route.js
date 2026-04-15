@@ -43,11 +43,11 @@ export async function POST(request) {
   }
   try {
     const body = await request.json()
-    const { title, description, reference_text, class_name } = body
+    const { title, description, reference_text, class_name, part_type } = body
     if (!title?.trim()) {
       return NextResponse.json({ error: '标题不能为空' }, { status: 400 })
     }
-    const id = createAssignment({ title: title.trim(), description, reference_text, class_name })
+    const id = createAssignment({ title: title.trim(), description, reference_text, class_name, part_type })
     return NextResponse.json({ id }, { status: 201 })
   } catch (err) {
     return NextResponse.json({ error: err.message }, { status: 500 })
