@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 
 const DATASETS_CONFIG = [
   { key: 'pronunciation_score', label: '发音', color: '#f59e0b' },
@@ -17,12 +17,16 @@ const DATASETS_CONFIG = [
  * @param {{ history: Array, height?: number }} props
  *   history — array of submission objects ordered by date ASC
  */
+const MAX_RETRIES = 30 // 30 × 500ms = 15s
+
 export default function ProgressChart({ history, height = 220 }) {
   const canvasRef = useRef(null)
   const chartRef = useRef(null)
+  const [loadFailed, setLoadFailed] = useState(false)
 
   useEffect(() => {
     if (!canvasRef.current || !history || history.length < 2) return
+    setLoadFailed(false)
 
     function buildChart() {
       if (typeof window === 'undefined' || !window.Chart) return false
@@ -82,9 +86,16 @@ export default function ProgressChart({ history, height = 220 }) {
 
     if (!buildChart()) {
       // Chart.js CDN not yet loaded — retry until available
+      let retries = 0
       const id = setInterval(() => {
-        if (buildChart()) clearInterval(id)
-      }, 100)
+        retries++
+        if (buildChart()) {
+          clearInterval(id)
+        } else if (retries >= MAX_RETRIES) {
+          clearInterval(id)
+          setLoadFailed(true)
+        }
+      }, 500)
       return () => {
         clearInterval(id)
         if (chartRef.current) chartRef.current.destroy()
@@ -100,6 +111,14 @@ export default function ProgressChart({ history, height = 220 }) {
     return (
       <p className="text-center text-sm text-gray-400 py-6">
         至少需要 2 次提交才能显示进步趋势图
+      </p>
+    )
+  }
+
+  if (loadFailed) {
+    return (
+      <p className="text-center text-sm text-red-400 py-6">
+        图表加载失败，请刷新页面重试
       </p>
     )
   }

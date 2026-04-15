@@ -59,7 +59,9 @@ function StudentHistorySection({ studentName }) {
     }
     setLoading(true)
     const timer = setTimeout(() => {
-      fetch(`/api/student-history?name=${encodeURIComponent(studentName.trim())}`)
+      fetch(`/api/student-history?name=${encodeURIComponent(studentName.trim())}`, {
+          headers: { 'x-student-token': btoa(studentName.trim()) },
+        })
         .then(r => r.ok ? r.json() : [])
         .then(data => {
           setHistory(Array.isArray(data) ? data : [])
@@ -165,6 +167,7 @@ export default function StudentPage() {
   const [error, setError] = useState(null)
   const fileInputRef = useRef(null)
   const resultRef = useRef(null)
+  const gotResultRef = useRef(false)
 
   // Load assignments when class changes
   useEffect(() => {
@@ -206,6 +209,7 @@ export default function StudentPage() {
 
     setError(null)
     setResult(null)
+    gotResultRef.current = false
     setSubmitting(true)
     setProgressStep('uploading')
 
@@ -235,12 +239,13 @@ export default function StudentPage() {
 
       setProgressStep('done')
       const data = await res.json()
+      gotResultRef.current = true
       setResult(data)
     } catch (err) {
       setError(err.message || '提交失败，请稍后再试')
     } finally {
       setSubmitting(false)
-      if (!result) setProgressStep(null)
+      if (!gotResultRef.current) setProgressStep(null)
     }
   }
 

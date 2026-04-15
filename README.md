@@ -77,3 +77,7 @@ submissions (id, student_name, class_name, assignment_id, audio_filename, transc
 ```
 
 The database auto-initializes on first run. Data is stored in `./data/grader.db`.
+
+## Known Issues
+
+- **`serverExternalPackages` warning in next.config.js** — Next.js may emit a warning about `serverExternalPackages` being unrecognized. This is a known issue and does not affect runtime behavior; the webpack `externals` configuration in `next.config.js` serves as a fallback to ensure `better-sqlite3` is correctly excluded from bundling.
