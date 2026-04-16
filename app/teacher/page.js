@@ -734,8 +734,11 @@ function StudentManagementPanel({ token, classId, className: classDisplayName })
   const authHeader = { 'Authorization': `Bearer ${token}` }
 
   async function fetchStudents() {
+    if (!token) return
     try {
-      const res = await fetch(`/api/students?class_id=${classId}`, { headers: authHeader })
+      const res = await fetch(`/api/students?class_id=${classId}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
       if (res.ok) {
         const data = await res.json()
         setStudents(Array.isArray(data) ? data : [])
@@ -745,7 +748,7 @@ function StudentManagementPanel({ token, classId, className: classDisplayName })
     }
   }
 
-  useEffect(() => { fetchStudents() }, [classId])
+  useEffect(() => { fetchStudents() }, [classId, token])
 
   async function handleAddStudents(e) {
     e.preventDefault()
