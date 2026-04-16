@@ -227,7 +227,19 @@ function ClassSelectScreen({ onSelect }) {
 
 // ── Homework list screen ────────────────────────────────────────────────────
 
-function HomeworkListScreen({ selectedClass, onSelectHomework, onFreePractice, onChangeClass }) {
+function CreditsBadge({ credits }) {
+  if (credits === null || credits === undefined) return null
+  const color = credits <= 0 ? 'bg-red-100 text-red-600' :
+                credits <= 5 ? 'bg-orange-100 text-orange-600' :
+                               'bg-green-100 text-green-700'
+  return (
+    <span className={`text-xs px-2.5 py-1 rounded-full font-bold ${color}`}>
+      剩余额度：{credits} 次
+    </span>
+  )
+}
+
+function HomeworkListScreen({ selectedClass, onSelectHomework, onFreePractice, onChangeClass, credits, studentName }) {
   const [homeworkList, setHomeworkList] = useState([])
   const [loading, setLoading] = useState(true)
 
@@ -259,6 +271,16 @@ function HomeworkListScreen({ selectedClass, onSelectHomework, onFreePractice, o
         </div>
       </header>
       <main className="max-w-lg mx-auto px-4 py-6 space-y-5 pb-20">
+        {/* Credits display */}
+        {credits !== null && credits !== undefined && (
+          <div className="flex items-center justify-between bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3">
+            <span className="text-sm text-gray-600">
+              {studentName ? `${studentName}，` : ''}你好！
+            </span>
+            <CreditsBadge credits={credits} />
+          </div>
+        )}
+
         <div className="text-center py-2">
           <p className="text-3xl mb-1">📚</p>
           <h2 className="text-xl font-bold text-gray-800">{selectedClass?.name}</h2>
@@ -311,7 +333,7 @@ function HomeworkListScreen({ selectedClass, onSelectHomework, onFreePractice, o
 
 // ── Homework question list + practice screen ────────────────────────────────
 
-function HomeworkPracticeScreen({ homework, studentName, onBack }) {
+function HomeworkPracticeScreen({ homework, studentName, studentId, credits, onCreditsUpdate, onBack }) {
   const [detail, setDetail] = useState(null)
   const [loading, setLoading] = useState(true)
   const [activeQuestion, setActiveQuestion] = useState(null)
@@ -352,6 +374,9 @@ function HomeworkPracticeScreen({ homework, studentName, onBack }) {
         homeworkId={homework.id}
         question={activeQuestion}
         studentName={studentName}
+        studentId={studentId}
+        credits={credits}
+        onCreditsUpdate={onCreditsUpdate}
         onDone={(result) => handleQuestionDone(activeQuestion.id, result)}
         onBack={() => setActiveQuestion(null)}
       />
@@ -370,7 +395,7 @@ function HomeworkPracticeScreen({ homework, studentName, onBack }) {
             <h1 className="text-sm font-bold text-gray-800">{homework.title}</h1>
             <p className="text-xs text-gray-400">{completedCount}/{questions.length} 已完成</p>
           </div>
-          <div className="w-12" />
+          <CreditsBadge credits={credits} />
         </div>
       </header>
       <main className="max-w-lg mx-auto px-4 py-6 space-y-3 pb-20">
@@ -433,7 +458,7 @@ function HomeworkPracticeScreen({ homework, studentName, onBack }) {
 
 // ── Single question practice screen ─────────────────────────────────────────
 
-function QuestionPracticeScreen({ homeworkId, question, studentName, onDone, onBack }) {
+function QuestionPracticeScreen({ homeworkId, question, studentName, studentId, credits, onCreditsUpdate, onDone, onBack }) {
   const [audioBlob, setAudioBlob] = useState(null)
   const [audioFilename, setAudioFilename] = useState(null)
   const [uploadedFile, setUploadedFile] = useState(null)
@@ -460,7 +485,8 @@ function QuestionPracticeScreen({ homeworkId, question, studentName, onDone, onB
   }
 
   const hasAudio = audioBlob || uploadedFile
-  const canSubmit = hasAudio && !submitting
+  const noCredits = credits !== null && credits !== undefined && credits <= 0
+  const canSubmit = hasAudio && !submitting && !noCredits
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -476,6 +502,7 @@ function QuestionPracticeScreen({ homeworkId, question, studentName, onDone, onB
       const formData = new FormData()
       formData.append('studentName', studentName)
       formData.append('questionId', question.id)
+      if (studentId) formData.append('studentId', studentId)
 
       if (audioBlob) {
         formData.append('audio', audioBlob, audioFilename || 'recording.webm')
@@ -499,6 +526,11 @@ function QuestionPracticeScreen({ homeworkId, question, studentName, onDone, onB
       const data = await res.json()
       gotResultRef.current = true
       setResult(data)
+
+      // Update credits from response
+      if (data.credits !== undefined && onCreditsUpdate) {
+        onCreditsUpdate(data.credits)
+      }
     } catch (err) {
       setError(err.message || '提交失败，请稍后再试')
     } finally {
@@ -615,6 +647,13 @@ function QuestionPracticeScreen({ homeworkId, question, studentName, onDone, onB
             </div>
           )}
 
+          {noCredits && (
+            <div className="bg-red-50 border border-red-200 text-red-600 rounded-2xl p-4 text-center">
+              <p className="font-semibold">额度已用完</p>
+              <p className="text-sm mt-1">请联系老师充值（6 元 = 100 次）</p>
+            </div>
+          )}
+
           <button
             type="submit"
             disabled={!canSubmit}
@@ -630,7 +669,7 @@ function QuestionPracticeScreen({ homeworkId, question, studentName, onDone, onB
 
 // ── Free practice mode (original flow) ──────────────────────────────────────
 
-function FreePracticeScreen({ onBack, initialClass }) {
+function FreePracticeScreen({ onBack, initialClass, studentId: initialStudentId, credits: initialCredits, onCreditsUpdate }) {
   const [studentName, setStudentName] = useState('')
   const [className, setClassName] = useState(initialClass || '')
   const [assignments, setAssignments] = useState([])
@@ -676,7 +715,8 @@ function FreePracticeScreen({ onBack, initialClass }) {
   }
 
   const hasAudio = audioBlob || uploadedFile
-  const canSubmit = studentName.trim() && className.trim() && hasAudio && !submitting
+  const noCredits = initialCredits !== null && initialCredits !== undefined && initialCredits <= 0
+  const canSubmit = studentName.trim() && className.trim() && hasAudio && !submitting && !noCredits
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -693,6 +733,7 @@ function FreePracticeScreen({ onBack, initialClass }) {
       formData.append('studentName', studentName.trim())
       formData.append('className', className.trim())
       if (selectedAssignment) formData.append('assignmentId', selectedAssignment)
+      if (initialStudentId) formData.append('studentId', initialStudentId)
 
       if (audioBlob) {
         formData.append('audio', audioBlob, audioFilename || 'recording.webm')
@@ -716,6 +757,11 @@ function FreePracticeScreen({ onBack, initialClass }) {
       const data = await res.json()
       gotResultRef.current = true
       setResult(data)
+
+      // Update credits from response
+      if (data.credits !== undefined && onCreditsUpdate) {
+        onCreditsUpdate(data.credits)
+      }
     } catch (err) {
       setError(err.message || '提交失败，请稍后再试')
     } finally {
@@ -758,6 +804,13 @@ function FreePracticeScreen({ onBack, initialClass }) {
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-6 space-y-5 pb-20">
+        {/* Credits display */}
+        {initialCredits !== null && initialCredits !== undefined && (
+          <div className="flex items-center justify-center">
+            <CreditsBadge credits={initialCredits} />
+          </div>
+        )}
+
         {!result && (
           <div className="text-center py-2">
             <p className="text-3xl mb-1">👋</p>
@@ -898,6 +951,13 @@ function FreePracticeScreen({ onBack, initialClass }) {
               </div>
             )}
 
+            {noCredits && (
+              <div className="bg-red-50 border border-red-200 text-red-600 rounded-2xl p-4 text-center">
+                <p className="font-semibold">额度已用完</p>
+                <p className="text-sm mt-1">请联系老师充值（6 元 = 100 次）</p>
+              </div>
+            )}
+
             <button
               type="submit"
               disabled={!canSubmit}
@@ -906,7 +966,7 @@ function FreePracticeScreen({ onBack, initialClass }) {
               {submitting ? '评分中…' : '🚀 提交评分'}
             </button>
 
-            {!hasAudio && (
+            {!hasAudio && !noCredits && (
               <p className="text-center text-xs text-gray-400">请先录音或上传音频文件</p>
             )}
           </form>
@@ -938,6 +998,8 @@ export default function StudentPage() {
   const [selectedHomework, setSelectedHomework] = useState(null)
   const [mode, setMode] = useState('loading') // loading | classSelect | homeworkList | homework | free
   const [studentName, setStudentName] = useState('')
+  const [studentId, setStudentId] = useState(null)
+  const [credits, setCredits] = useState(null)
   const [nameConfirmed, setNameConfirmed] = useState(false)
 
   // Load saved class from localStorage on mount
@@ -956,16 +1018,28 @@ export default function StudentPage() {
     }
 
     const savedName = localStorage.getItem('ket_student_name')
+    const savedStudentId = localStorage.getItem('ket_student_id')
+    const savedCredits = localStorage.getItem('ket_credits')
     if (savedName) {
       setStudentName(savedName)
       setNameConfirmed(true)
     }
+    if (savedStudentId) setStudentId(Number(savedStudentId))
+    if (savedCredits !== null && savedCredits !== '') setCredits(Number(savedCredits))
   }, [])
 
   function handleClassSelect(cls) {
     if (cls) {
       setSelectedClass(cls)
       localStorage.setItem('ket_selected_class', JSON.stringify(cls))
+      // Clear previous student info when switching class
+      setNameConfirmed(false)
+      setStudentName('')
+      setStudentId(null)
+      setCredits(null)
+      localStorage.removeItem('ket_student_name')
+      localStorage.removeItem('ket_student_id')
+      localStorage.removeItem('ket_credits')
       setMode('homeworkList')
     } else {
       setSelectedClass(null)
@@ -976,8 +1050,15 @@ export default function StudentPage() {
 
   function handleChangeClass() {
     localStorage.removeItem('ket_selected_class')
+    localStorage.removeItem('ket_student_name')
+    localStorage.removeItem('ket_student_id')
+    localStorage.removeItem('ket_credits')
     setSelectedClass(null)
     setSelectedHomework(null)
+    setNameConfirmed(false)
+    setStudentName('')
+    setStudentId(null)
+    setCredits(null)
     setMode('classSelect')
   }
 
@@ -991,10 +1072,18 @@ export default function StudentPage() {
     setMode('homework')
   }
 
-  function handleNameConfirm(name) {
+  function handleNameConfirm(name, sid, creds) {
     setStudentName(name)
     setNameConfirmed(true)
     localStorage.setItem('ket_student_name', name)
+    if (sid) {
+      setStudentId(sid)
+      localStorage.setItem('ket_student_id', String(sid))
+    }
+    if (creds !== null && creds !== undefined) {
+      setCredits(creds)
+      localStorage.setItem('ket_credits', String(creds))
+    }
     setMode('homework')
   }
 
@@ -1015,6 +1104,9 @@ export default function StudentPage() {
       <FreePracticeScreen
         onBack={() => setMode('classSelect')}
         initialClass={selectedClass?.name || ''}
+        studentId={studentId}
+        credits={credits}
+        onCreditsUpdate={(c) => { setCredits(c); localStorage.setItem('ket_credits', String(c)) }}
       />
     )
   }
@@ -1024,6 +1116,9 @@ export default function StudentPage() {
       <HomeworkPracticeScreen
         homework={selectedHomework}
         studentName={studentName}
+        studentId={studentId}
+        credits={credits}
+        onCreditsUpdate={(c) => { setCredits(c); localStorage.setItem('ket_credits', String(c)) }}
         onBack={() => { setSelectedHomework(null); setMode('homeworkList') }}
       />
     )
@@ -1036,6 +1131,7 @@ export default function StudentPage() {
       <NameInputScreen
         onConfirm={handleNameConfirm}
         onBack={() => setSelectedHomework(null)}
+        classId={selectedClass?.id}
       />
     )
   }
@@ -1046,18 +1142,48 @@ export default function StudentPage() {
       onSelectHomework={handleSelectHomework}
       onFreePractice={() => setMode('free')}
       onChangeClass={handleChangeClass}
+      credits={credits}
+      studentName={nameConfirmed ? studentName : null}
     />
   )
 }
 
 // ── Name input screen ───────────────────────────────────────────────────────
 
-function NameInputScreen({ onConfirm, onBack }) {
+function NameInputScreen({ onConfirm, onBack, classId }) {
   const [name, setName] = useState('')
+  const [verifying, setVerifying] = useState(false)
+  const [error, setError] = useState(null)
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault()
-    if (name.trim()) onConfirm(name.trim())
+    if (!name.trim()) return
+
+    // If classId provided, verify against roster
+    if (classId) {
+      setVerifying(true)
+      setError(null)
+      try {
+        const res = await fetch('/api/students/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ class_id: classId, name: name.trim() }),
+        })
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}))
+          setError(data.error || '姓名不在该班级名单中，请联系老师')
+          return
+        }
+        const data = await res.json()
+        onConfirm(name.trim(), data.student_id, data.credits)
+      } catch {
+        setError('网络错误，请重试')
+      } finally {
+        setVerifying(false)
+      }
+    } else {
+      onConfirm(name.trim(), null, null)
+    }
   }
 
   return (
@@ -1072,18 +1198,23 @@ function NameInputScreen({ onConfirm, onBack }) {
           <input
             type="text"
             value={name}
-            onChange={e => setName(e.target.value)}
+            onChange={e => { setName(e.target.value); setError(null) }}
             placeholder="请输入姓名"
             className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition text-base text-center"
             autoFocus
             required
           />
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl p-3 text-sm text-center">
+              {error}
+            </div>
+          )}
           <button
             type="submit"
-            disabled={!name.trim()}
+            disabled={!name.trim() || verifying}
             className="w-full py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-semibold rounded-xl transition-all active:scale-95"
           >
-            开始练习
+            {verifying ? '验证中…' : '开始练习'}
           </button>
           <button
             type="button"

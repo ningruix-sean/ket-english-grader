@@ -4,7 +4,7 @@ import { existsSync } from 'fs'
 import path from 'path'
 import os from 'os'
 import { transcribeAudio, gradeSubmission } from '@/lib/openai'
-import { createSubmission, getActiveAssignments } from '@/lib/db'
+import { createSubmission, getActiveAssignments, getStudentById, consumeCredit } from '@/lib/db'
 
 export const runtime = 'nodejs'
 
@@ -20,6 +20,7 @@ export async function POST(request) {
     const studentName = formData.get('studentName')?.toString().trim()
     const className   = formData.get('className')?.toString().trim()
     const assignmentId = formData.get('assignmentId')?.toString().trim() || null
+    const studentId   = formData.get('studentId')?.toString().trim() || null
     const audioFile   = formData.get('audio')
 
     // Validation
@@ -31,6 +32,14 @@ export async function POST(request) {
     }
     if (!audioFile || typeof audioFile === 'string') {
       return NextResponse.json({ error: '请上传音频文件' }, { status: 400 })
+    }
+
+    // Check credits if student_id provided
+    if (studentId) {
+      const student = getStudentById(Number(studentId))
+      if (student && student.credits <= 0) {
+        return NextResponse.json({ error: '额度已用完，请联系老师充值' }, { status: 403 })
+      }
     }
 
     // Check file size (25MB limit for Whisper)
@@ -115,10 +124,22 @@ export async function POST(request) {
       // Non-fatal: still return result to student
     }
 
+    // Consume 1 credit after successful grading
+    let remainingCredits = null
+    if (studentId) {
+      try {
+        const updated = consumeCredit(Number(studentId))
+        if (updated) remainingCredits = updated.credits
+      } catch (err) {
+        console.error('Credit deduction error:', err)
+      }
+    }
+
     return NextResponse.json({
       id: submissionId,
       transcript,
       ...gradeResult,
+      ...(remainingCredits !== null ? { credits: remainingCredits } : {}),
     })
 
   } catch (err) {

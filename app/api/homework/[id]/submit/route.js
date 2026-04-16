@@ -3,7 +3,7 @@ import { writeFile, unlink } from 'fs/promises'
 import path from 'path'
 import os from 'os'
 import { transcribeAudio, gradeSubmission } from '@/lib/openai'
-import { getHomework, getQuestion, createHomeworkSubmission } from '@/lib/db'
+import { getHomework, getQuestion, createHomeworkSubmission, getStudentById, consumeCredit } from '@/lib/db'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -17,12 +17,21 @@ export async function POST(request, { params }) {
 
     const studentName = formData.get('studentName')?.toString().trim()
     const questionId = formData.get('questionId')?.toString().trim()
+    const studentId = formData.get('studentId')?.toString().trim() || null
     const audioFile = formData.get('audio')
 
     if (!studentName) return NextResponse.json({ error: '请填写姓名' }, { status: 400 })
     if (!questionId) return NextResponse.json({ error: '缺少题目ID' }, { status: 400 })
     if (!audioFile || typeof audioFile === 'string') {
       return NextResponse.json({ error: '请上传音频文件' }, { status: 400 })
+    }
+
+    // Check credits if student_id provided
+    if (studentId) {
+      const student = getStudentById(Number(studentId))
+      if (student && student.credits <= 0) {
+        return NextResponse.json({ error: '额度已用完，请联系老师充值' }, { status: 403 })
+      }
     }
 
     const MAX_BYTES = 25 * 1024 * 1024
@@ -92,10 +101,22 @@ export async function POST(request, { params }) {
       console.error('DB save error:', err)
     }
 
+    // Consume 1 credit after successful grading
+    let remainingCredits = null
+    if (studentId) {
+      try {
+        const updated = consumeCredit(Number(studentId))
+        if (updated) remainingCredits = updated.credits
+      } catch (err) {
+        console.error('Credit deduction error:', err)
+      }
+    }
+
     return NextResponse.json({
       id: submissionId,
       transcript,
       ...gradeResult,
+      ...(remainingCredits !== null ? { credits: remainingCredits } : {}),
     })
   } catch (err) {
     console.error('Homework submit error:', err)

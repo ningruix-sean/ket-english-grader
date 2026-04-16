@@ -629,6 +629,7 @@ function StudentProgressPanel() {
 function ClassManagementPanel({ token, classes, onRefresh }) {
   const [newName, setNewName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [expandedClass, setExpandedClass] = useState(null) // class id
 
   async function handleCreate(e) {
     e.preventDefault()
@@ -686,19 +687,243 @@ function ClassManagementPanel({ token, classes, onRefresh }) {
       ) : (
         <div className="space-y-2">
           {classes.map(c => (
-            <div key={c.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center justify-between">
-              <div>
-                <h4 className="font-semibold text-gray-800">{c.name}</h4>
-                <p className="text-xs text-gray-400">
-                  创建于 {new Date(c.created_at).toLocaleDateString('zh-CN')}
-                </p>
+            <div key={c.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="p-4 flex items-center justify-between">
+                <button
+                  onClick={() => setExpandedClass(expandedClass === c.id ? null : c.id)}
+                  className="text-left flex-1"
+                >
+                  <h4 className="font-semibold text-gray-800">{c.name}</h4>
+                  <p className="text-xs text-gray-400">
+                    创建于 {new Date(c.created_at).toLocaleDateString('zh-CN')}
+                    <span className="ml-2 text-blue-400">
+                      {expandedClass === c.id ? '收起学生名单 ▲' : '管理学生 ▼'}
+                    </span>
+                  </p>
+                </button>
+                <button
+                  onClick={() => handleDelete(c.id, c.name)}
+                  className="text-gray-300 hover:text-red-400 transition text-sm ml-3"
+                >
+                  🗑️
+                </button>
               </div>
-              <button
-                onClick={() => handleDelete(c.id, c.name)}
-                className="text-gray-300 hover:text-red-400 transition text-sm"
-              >
-                🗑️
-              </button>
+              {expandedClass === c.id && (
+                <StudentManagementPanel token={token} classId={c.id} className={c.name} />
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Student management within a class ───────────────────────────────────────
+
+function StudentManagementPanel({ token, classId, className: classDisplayName }) {
+  const [students, setStudents] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [newNames, setNewNames] = useState('')
+  const [adding, setAdding] = useState(false)
+  const [rechargeId, setRechargeId] = useState(null) // student id for single recharge
+  const [rechargeAmount, setRechargeAmount] = useState('')
+  const [batchAmount, setBatchAmount] = useState('')
+  const [batchCharging, setBatchCharging] = useState(false)
+
+  const authHeader = { 'Authorization': `Bearer ${token}` }
+
+  async function fetchStudents() {
+    try {
+      const res = await fetch(`/api/students?class_id=${classId}`, { headers: authHeader })
+      if (res.ok) {
+        const data = await res.json()
+        setStudents(Array.isArray(data) ? data : [])
+      }
+    } catch {} finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchStudents() }, [classId])
+
+  async function handleAddStudents(e) {
+    e.preventDefault()
+    if (!newNames.trim()) return
+    setAdding(true)
+    try {
+      const res = await fetch('/api/students', {
+        method: 'POST',
+        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ class_id: classId, names: newNames }),
+      })
+      if (res.ok) {
+        setNewNames('')
+        fetchStudents()
+      }
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  async function handleDeleteStudent(id, name) {
+    if (!confirm(`确认删除学生"${name}"？`)) return
+    await fetch(`/api/students?id=${id}`, {
+      method: 'DELETE',
+      headers: authHeader,
+    })
+    fetchStudents()
+  }
+
+  async function handleRecharge(studentId) {
+    const amount = Number(rechargeAmount)
+    if (!amount || amount <= 0) return
+    try {
+      await fetch(`/api/students/${studentId}/credits`, {
+        method: 'POST',
+        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount }),
+      })
+      setRechargeId(null)
+      setRechargeAmount('')
+      fetchStudents()
+    } catch {}
+  }
+
+  async function handleBatchRecharge() {
+    const amount = Number(batchAmount)
+    if (!amount || amount <= 0) return
+    setBatchCharging(true)
+    try {
+      await fetch('/api/students/batch-credits', {
+        method: 'POST',
+        headers: { ...authHeader, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ class_id: classId, amount }),
+      })
+      setBatchAmount('')
+      fetchStudents()
+    } finally {
+      setBatchCharging(false)
+    }
+  }
+
+  return (
+    <div className="border-t border-gray-100 bg-gray-50/50 p-4 space-y-4">
+      {/* Add students */}
+      <div>
+        <p className="text-xs font-medium text-gray-500 mb-2">添加学生（逗号或换行分隔）</p>
+        <form onSubmit={handleAddStudents} className="flex gap-2">
+          <textarea
+            value={newNames}
+            onChange={e => setNewNames(e.target.value)}
+            placeholder="例如：张三，李四，王五"
+            rows={2}
+            className="flex-1 px-3 py-2 rounded-lg border border-gray-200 focus:border-blue-400 outline-none text-sm resize-none"
+          />
+          <button
+            type="submit"
+            disabled={adding || !newNames.trim()}
+            className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-200 disabled:text-gray-400 text-white text-xs font-semibold rounded-lg transition self-end"
+          >
+            {adding ? '添加中…' : '添加'}
+          </button>
+        </form>
+      </div>
+
+      {/* Batch recharge */}
+      {students.length > 0 && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">全班充值：</span>
+          <input
+            type="number"
+            min="1"
+            value={batchAmount}
+            onChange={e => setBatchAmount(e.target.value)}
+            placeholder="次数"
+            className="w-20 px-2 py-1.5 text-xs border border-gray-200 rounded-lg focus:border-blue-400 outline-none"
+          />
+          <button
+            onClick={handleBatchRecharge}
+            disabled={batchCharging || !batchAmount || Number(batchAmount) <= 0}
+            className="px-3 py-1.5 bg-green-500 hover:bg-green-600 disabled:bg-gray-200 disabled:text-gray-400 text-white text-xs font-medium rounded-lg transition"
+          >
+            {batchCharging ? '充值中…' : '全班充值'}
+          </button>
+          <span className="text-xs text-gray-400 ml-1">（6 元 = 100 次）</span>
+        </div>
+      )}
+
+      {/* Student list */}
+      {loading && <p className="text-xs text-gray-400 text-center py-4">加载中…</p>}
+
+      {!loading && students.length === 0 && (
+        <p className="text-xs text-gray-400 text-center py-3">暂无学生，请在上方添加</p>
+      )}
+
+      {!loading && students.length > 0 && (
+        <div className="space-y-1">
+          <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-2 text-xs font-medium text-gray-400">
+            <span>姓名</span>
+            <span className="text-center w-16">剩余额度</span>
+            <span className="text-center w-16">已用次数</span>
+            <span className="w-20 text-center">操作</span>
+          </div>
+          {students.map(s => (
+            <div key={s.id} className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center px-2 py-2 bg-white rounded-lg border border-gray-100">
+              <span className="text-sm text-gray-700 font-medium truncate">{s.name}</span>
+              <span className={`text-center w-16 text-xs font-bold ${
+                s.credits <= 0 ? 'text-red-500' :
+                s.credits <= 5 ? 'text-orange-500' :
+                'text-green-600'
+              }`}>
+                {s.credits}
+              </span>
+              <span className="text-center w-16 text-xs text-gray-400">{s.total_used}</span>
+              <div className="flex items-center gap-1 w-20 justify-end">
+                {rechargeId === s.id ? (
+                  <div className="flex items-center gap-1">
+                    <input
+                      type="number"
+                      min="1"
+                      value={rechargeAmount}
+                      onChange={e => setRechargeAmount(e.target.value)}
+                      placeholder="次数"
+                      className="w-14 px-1.5 py-1 text-xs border border-gray-200 rounded focus:border-blue-400 outline-none"
+                      autoFocus
+                    />
+                    <button
+                      onClick={() => handleRecharge(s.id)}
+                      disabled={!rechargeAmount || Number(rechargeAmount) <= 0}
+                      className="text-xs text-green-500 hover:text-green-700 font-medium disabled:text-gray-300"
+                    >
+                      确认
+                    </button>
+                    <button
+                      onClick={() => { setRechargeId(null); setRechargeAmount('') }}
+                      className="text-xs text-gray-400 hover:text-gray-600"
+                    >
+                      取消
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => { setRechargeId(s.id); setRechargeAmount('100') }}
+                      className="text-xs text-green-500 hover:text-green-700 font-medium"
+                      title="充值额度"
+                    >
+                      +充值
+                    </button>
+                    <button
+                      onClick={() => handleDeleteStudent(s.id, s.name)}
+                      className="text-xs text-gray-300 hover:text-red-400 ml-1"
+                      title="删除学生"
+                    >
+                      🗑️
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           ))}
         </div>
