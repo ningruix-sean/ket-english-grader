@@ -65,7 +65,7 @@ function LoginScreen({ onLogin }) {
           </button>
         </form>
         <p className="text-center text-xs text-gray-400">
-          默认密码：teacher123（可通过 TEACHER_PASSWORD 环境变量修改）
+          请输入教师密码登录
         </p>
       </div>
     </div>
