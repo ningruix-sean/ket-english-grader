@@ -50,7 +50,7 @@ function ProgressBar({ step }) {
 function StudentHistorySection({ studentName }) {
   const [history, setHistory] = useState([])
   const [loading, setLoading] = useState(false)
-  const [tab, setTab] = useState('records') // records | chart
+  const [tab, setTab] = useState('records')
 
   useEffect(() => {
     if (!studentName || studentName.trim().length < 1) {
@@ -109,7 +109,6 @@ function StudentHistorySection({ studentName }) {
 
       {!loading && tab === 'records' && (
         <div className="space-y-1 max-h-60 overflow-y-auto pr-1">
-          {/* Header */}
           <div className="grid grid-cols-[1fr_auto] gap-2 px-1 pb-1 text-xs font-semibold text-gray-400">
             <span>日期 · 作业</span>
             <span className="text-right">发音/流利/语法/内容 · 总分</span>
@@ -151,11 +150,489 @@ function StudentHistorySection({ studentName }) {
   )
 }
 
-// ── Main page ────────────────────────────────────────────────────────────────
+// ── Class selection screen ──────────────────────────────────────────────────
 
-export default function StudentPage() {
+function ClassSelectScreen({ onSelect }) {
+  const [classes, setClasses] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetch('/api/classes')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setClasses(Array.isArray(data) ? data : []))
+      .catch(() => setClasses([]))
+      .finally(() => setLoading(false))
+  }, [])
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-slate-50">
+      <header className="bg-white shadow-sm sticky top-0 z-10">
+        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-blue-600">🎙️ KET 口语练习</h1>
+            <p className="text-xs text-gray-400">智能评分系统</p>
+          </div>
+          <a href="/teacher" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+            教师登录
+          </a>
+        </div>
+      </header>
+      <main className="max-w-lg mx-auto px-4 py-8 space-y-6">
+        <div className="text-center py-4">
+          <p className="text-4xl mb-2">🏫</p>
+          <h2 className="text-xl font-bold text-gray-800">选择你的班级</h2>
+          <p className="text-sm text-gray-500 mt-1">选择后可查看班级作业</p>
+        </div>
+
+        {loading && <p className="text-center text-gray-400 text-sm">加载中…</p>}
+
+        {!loading && classes.length === 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 text-center">
+            <p className="text-gray-400 mb-4">暂无班级，请联系老师创建</p>
+            <button
+              onClick={() => onSelect(null)}
+              className="px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-xl transition"
+            >
+              直接进入自由练习
+            </button>
+          </div>
+        )}
+
+        {!loading && classes.length > 0 && (
+          <div className="space-y-3">
+            {classes.map(c => (
+              <button
+                key={c.id}
+                onClick={() => onSelect(c)}
+                className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-5 text-left hover:border-blue-300 hover:shadow-md transition-all active:scale-[0.98]"
+              >
+                <h3 className="font-semibold text-gray-800 text-lg">{c.name}</h3>
+                <p className="text-xs text-gray-400 mt-1">点击进入</p>
+              </button>
+            ))}
+            <div className="text-center pt-4">
+              <button
+                onClick={() => onSelect(null)}
+                className="text-sm text-gray-400 hover:text-blue-500 underline transition"
+              >
+                跳过，直接自由练习
+              </button>
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}
+
+// ── Homework list screen ────────────────────────────────────────────────────
+
+function HomeworkListScreen({ selectedClass, onSelectHomework, onFreePractice, onChangeClass }) {
+  const [homeworkList, setHomeworkList] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!selectedClass) { setLoading(false); return }
+    fetch(`/api/homework?class_id=${selectedClass.id}`)
+      .then(r => r.ok ? r.json() : [])
+      .then(data => setHomeworkList(Array.isArray(data) ? data : []))
+      .catch(() => setHomeworkList([]))
+      .finally(() => setLoading(false))
+  }, [selectedClass])
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-slate-50">
+      <header className="bg-white shadow-sm sticky top-0 z-10">
+        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-blue-600">🎙️ KET 口语练习</h1>
+            <p className="text-xs text-gray-400">{selectedClass?.name || '自由练习'}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={onChangeClass} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+              切换班级
+            </button>
+            <a href="/teacher" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+              教师登录
+            </a>
+          </div>
+        </div>
+      </header>
+      <main className="max-w-lg mx-auto px-4 py-6 space-y-5 pb-20">
+        <div className="text-center py-2">
+          <p className="text-3xl mb-1">📚</p>
+          <h2 className="text-xl font-bold text-gray-800">{selectedClass?.name}</h2>
+          <p className="text-sm text-gray-500 mt-1">选择作业开始练习</p>
+        </div>
+
+        {loading && <p className="text-center text-gray-400 text-sm">加载中…</p>}
+
+        {!loading && homeworkList.length === 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 text-center">
+            <p className="text-gray-400 mb-2">暂无作业</p>
+            <p className="text-xs text-gray-300">老师还没有布置作业，可以先自由练习</p>
+          </div>
+        )}
+
+        {!loading && homeworkList.map(hw => {
+          let qCount = 0
+          try { qCount = JSON.parse(hw.question_ids).length } catch {}
+          return (
+            <button
+              key={hw.id}
+              onClick={() => onSelectHomework(hw)}
+              className="w-full bg-white rounded-2xl shadow-sm border border-gray-100 p-5 text-left hover:border-blue-300 hover:shadow-md transition-all active:scale-[0.98]"
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-800">{hw.title}</h3>
+                  <p className="text-xs text-gray-400 mt-1">{qCount} 道题 · {new Date(hw.created_at).toLocaleDateString('zh-CN')}</p>
+                </div>
+                {hw.due_date && (
+                  <span className="text-xs text-orange-400 shrink-0">截止 {hw.due_date}</span>
+                )}
+              </div>
+            </button>
+          )
+        })}
+
+        <div className="pt-2">
+          <button
+            onClick={onFreePractice}
+            className="w-full py-4 px-6 bg-gray-100 hover:bg-gray-200 text-gray-600 font-semibold text-base rounded-2xl transition-all active:scale-95"
+          >
+            🎯 自由练习模式
+          </button>
+        </div>
+      </main>
+    </div>
+  )
+}
+
+// ── Homework question list + practice screen ────────────────────────────────
+
+function HomeworkPracticeScreen({ homework, studentName, onBack }) {
+  const [detail, setDetail] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [activeQuestion, setActiveQuestion] = useState(null)
+  const [completedQuestions, setCompletedQuestions] = useState({}) // qid -> result
+
+  useEffect(() => {
+    fetch(`/api/homework/${homework.id}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setDetail(d))
+      .catch(() => setDetail(null))
+      .finally(() => setLoading(false))
+  }, [homework.id])
+
+  function handleQuestionDone(questionId, result) {
+    setCompletedQuestions(prev => ({ ...prev, [questionId]: result }))
+    setActiveQuestion(null)
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-slate-50 flex items-center justify-center">
+        <p className="text-gray-400">加载中…</p>
+      </div>
+    )
+  }
+
+  if (!detail) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-slate-50 flex items-center justify-center">
+        <p className="text-red-400">加载失败</p>
+      </div>
+    )
+  }
+
+  if (activeQuestion) {
+    return (
+      <QuestionPracticeScreen
+        homeworkId={homework.id}
+        question={activeQuestion}
+        studentName={studentName}
+        onDone={(result) => handleQuestionDone(activeQuestion.id, result)}
+        onBack={() => setActiveQuestion(null)}
+      />
+    )
+  }
+
+  const questions = detail.questions || []
+  const completedCount = Object.keys(completedQuestions).length
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-slate-50">
+      <header className="bg-white shadow-sm sticky top-0 z-10">
+        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+          <button onClick={onBack} className="text-sm text-blue-500 hover:text-blue-700">&larr; 返回</button>
+          <div className="text-center">
+            <h1 className="text-sm font-bold text-gray-800">{homework.title}</h1>
+            <p className="text-xs text-gray-400">{completedCount}/{questions.length} 已完成</p>
+          </div>
+          <div className="w-12" />
+        </div>
+      </header>
+      <main className="max-w-lg mx-auto px-4 py-6 space-y-3 pb-20">
+        {/* Progress indicator */}
+        {questions.length > 0 && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-600">完成进度</span>
+              <span className="text-sm font-bold text-blue-600">{completedCount}/{questions.length}</span>
+            </div>
+            <div className="w-full bg-gray-100 rounded-full h-2">
+              <div
+                className="bg-blue-500 h-2 rounded-full transition-all duration-500"
+                style={{ width: `${questions.length > 0 ? (completedCount / questions.length * 100) : 0}%` }}
+              />
+            </div>
+          </div>
+        )}
+
+        {questions.map((q, idx) => {
+          const done = completedQuestions[q.id]
+          return (
+            <button
+              key={q.id}
+              onClick={() => setActiveQuestion(q)}
+              className={`w-full bg-white rounded-2xl shadow-sm border p-4 text-left transition-all active:scale-[0.98] ${
+                done ? 'border-green-200 bg-green-50/30' : 'border-gray-100 hover:border-blue-300 hover:shadow-md'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${
+                  done ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400'
+                }`}>
+                  {done ? '✓' : idx + 1}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-800">{q.examiner_question}</p>
+                  {done && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                        done.overall_score >= 90 ? 'bg-emerald-100 text-emerald-700' :
+                        done.overall_score >= 75 ? 'bg-blue-100 text-blue-700' :
+                        done.overall_score >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-red-100 text-red-600'
+                      }`}>
+                        {done.overall_score} 分
+                      </span>
+                      <span className="text-xs text-gray-400">点击重新练习</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </button>
+          )
+        })}
+      </main>
+    </div>
+  )
+}
+
+// ── Single question practice screen ─────────────────────────────────────────
+
+function QuestionPracticeScreen({ homeworkId, question, studentName, onDone, onBack }) {
+  const [audioBlob, setAudioBlob] = useState(null)
+  const [audioFilename, setAudioFilename] = useState(null)
+  const [uploadedFile, setUploadedFile] = useState(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [progressStep, setProgressStep] = useState(null)
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState(null)
+  const fileInputRef = useRef(null)
+  const gotResultRef = useRef(false)
+
+  function handleRecordingReady(blob, filename) {
+    setAudioBlob(blob)
+    setAudioFilename(filename)
+    setUploadedFile(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  function handleFileChange(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadedFile(file)
+    setAudioBlob(null)
+    setAudioFilename(null)
+  }
+
+  const hasAudio = audioBlob || uploadedFile
+  const canSubmit = hasAudio && !submitting
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!canSubmit) return
+
+    setError(null)
+    setResult(null)
+    gotResultRef.current = false
+    setSubmitting(true)
+    setProgressStep('uploading')
+
+    try {
+      const formData = new FormData()
+      formData.append('studentName', studentName)
+      formData.append('questionId', question.id)
+
+      if (audioBlob) {
+        formData.append('audio', audioBlob, audioFilename || 'recording.webm')
+      } else if (uploadedFile) {
+        formData.append('audio', uploadedFile, uploadedFile.name)
+      }
+
+      const stepTimer = setTimeout(() => setProgressStep('transcribing'), 1500)
+      const stepTimer2 = setTimeout(() => setProgressStep('grading'), 4000)
+
+      const res = await fetch(`/api/homework/${homeworkId}/submit`, { method: 'POST', body: formData })
+      clearTimeout(stepTimer)
+      clearTimeout(stepTimer2)
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || `服务器错误 (${res.status})`)
+      }
+
+      setProgressStep('done')
+      const data = await res.json()
+      gotResultRef.current = true
+      setResult(data)
+    } catch (err) {
+      setError(err.message || '提交失败，请稍后再试')
+    } finally {
+      setSubmitting(false)
+      if (!gotResultRef.current) setProgressStep(null)
+    }
+  }
+
+  if (result) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-slate-50">
+        <header className="bg-white shadow-sm sticky top-0 z-10">
+          <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+            <button onClick={() => onDone(result)} className="text-sm text-blue-500 hover:text-blue-700">&larr; 返回题目列表</button>
+            <div className="w-12" />
+          </div>
+        </header>
+        <main className="max-w-lg mx-auto px-4 py-6 space-y-4 pb-20">
+          <div className="bg-blue-50 rounded-2xl p-4">
+            <p className="text-sm font-medium text-blue-700 mb-1">考官提问：</p>
+            <p className="text-blue-800">{question.examiner_question}</p>
+          </div>
+          <GradeReport result={result} studentName={studentName} className="" />
+          <button
+            onClick={() => onDone(result)}
+            className="w-full py-3 bg-blue-500 hover:bg-blue-600 text-white font-semibold rounded-2xl transition"
+          >
+            返回题目列表
+          </button>
+        </main>
+      </div>
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-slate-50">
+      <header className="bg-white shadow-sm sticky top-0 z-10">
+        <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
+          <button onClick={onBack} className="text-sm text-blue-500 hover:text-blue-700">&larr; 返回</button>
+          <div className="w-12" />
+        </div>
+      </header>
+      <main className="max-w-lg mx-auto px-4 py-6 space-y-5 pb-20">
+        {/* Question prompt */}
+        <div className="bg-white rounded-2xl shadow-sm border border-blue-200 p-5">
+          <p className="text-xs text-blue-400 font-medium mb-2">考官提问：</p>
+          <p className="text-lg font-semibold text-gray-800">{question.examiner_question}</p>
+          <div className="mt-3 bg-gray-50 rounded-xl p-3">
+            <p className="text-xs text-gray-400 mb-1">参考回答：</p>
+            <p className="text-sm text-gray-600">{question.reference_answer}</p>
+          </div>
+        </div>
+
+        {/* Audio input */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
+            <h3 className="font-semibold text-gray-700">🎤 录制你的回答</h3>
+
+            <div>
+              <p className="text-xs text-gray-500 mb-2">方式一：直接录音</p>
+              <AudioRecorder onAudioReady={handleRecordingReady} disabled={submitting} />
+            </div>
+
+            <div className="flex items-center gap-3 text-gray-300">
+              <div className="flex-1 h-px bg-gray-100" />
+              <span className="text-xs">或</span>
+              <div className="flex-1 h-px bg-gray-100" />
+            </div>
+
+            <div>
+              <p className="text-xs text-gray-500 mb-2">方式二：上传音频文件</p>
+              <label className={`flex flex-col items-center justify-center gap-2 w-full py-5 px-4 border-2 border-dashed rounded-2xl cursor-pointer transition-colors
+                ${uploadedFile ? 'border-green-300 bg-green-50' : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'}
+                ${submitting ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                <span className="text-2xl">{uploadedFile ? '✅' : '📁'}</span>
+                <span className="text-sm text-gray-600 font-medium">
+                  {uploadedFile ? uploadedFile.name : '点击选择音频文件'}
+                </span>
+                <span className="text-xs text-gray-400">支持 MP3、WAV、M4A、WebM 等格式，最大 25MB</span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="audio/*,.mp3,.wav,.m4a,.ogg,.webm,.mp4,.aac,.flac"
+                  className="hidden"
+                  onChange={handleFileChange}
+                  disabled={submitting}
+                />
+              </label>
+              {uploadedFile && !submitting && (
+                <button
+                  type="button"
+                  onClick={() => { setUploadedFile(null); if (fileInputRef.current) fileInputRef.current.value = '' }}
+                  className="text-xs text-gray-400 hover:text-gray-600 underline mt-1 w-full text-center"
+                >
+                  移除文件
+                </button>
+              )}
+            </div>
+          </div>
+
+          {submitting && progressStep && (
+            <div className="bg-white rounded-2xl shadow-sm border border-blue-100 p-5">
+              <ProgressBar step={progressStep} />
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 flex items-start gap-3">
+              <span className="text-xl shrink-0">⚠️</span>
+              <div>
+                <p className="font-medium">提交失败</p>
+                <p className="text-sm mt-0.5">{error}</p>
+              </div>
+            </div>
+          )}
+
+          <button
+            type="submit"
+            disabled={!canSubmit}
+            className="w-full py-4 px-6 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-lg rounded-2xl shadow-md transition-all active:scale-95 disabled:cursor-not-allowed"
+          >
+            {submitting ? '评分中…' : '🚀 提交评分'}
+          </button>
+        </form>
+      </main>
+    </div>
+  )
+}
+
+// ── Free practice mode (original flow) ──────────────────────────────────────
+
+function FreePracticeScreen({ onBack, initialClass }) {
   const [studentName, setStudentName] = useState('')
-  const [className, setClassName] = useState('')
+  const [className, setClassName] = useState(initialClass || '')
   const [assignments, setAssignments] = useState([])
   const [selectedAssignment, setSelectedAssignment] = useState('')
   const [audioBlob, setAudioBlob] = useState(null)
@@ -169,7 +646,6 @@ export default function StudentPage() {
   const resultRef = useRef(null)
   const gotResultRef = useRef(false)
 
-  // Load assignments when class changes
   useEffect(() => {
     if (!className.trim()) return
     fetch(`/api/assignments?class=${encodeURIComponent(className)}`)
@@ -178,7 +654,6 @@ export default function StudentPage() {
       .catch(() => setAssignments([]))
   }, [className])
 
-  // Scroll to result
   useEffect(() => {
     if (result && resultRef.current) {
       resultRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -259,41 +734,42 @@ export default function StudentPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  // Currently selected assignment object
   const selectedAssignmentObj = assignments.find(x => x.id === Number(selectedAssignment))
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-blue-50 to-slate-50">
-      {/* Header */}
       <header className="bg-white shadow-sm sticky top-0 z-10">
         <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
           <div>
             <h1 className="text-lg font-bold text-blue-600">🎙️ KET 口语练习</h1>
-            <p className="text-xs text-gray-400">智能评分系统</p>
+            <p className="text-xs text-gray-400">自由练习模式</p>
           </div>
-          <a href="/teacher" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
-            教师登录
-          </a>
+          <div className="flex items-center gap-3">
+            {onBack && (
+              <button onClick={onBack} className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                &larr; 返回
+              </button>
+            )}
+            <a href="/teacher" className="text-xs text-gray-400 hover:text-gray-600 transition-colors">
+              教师登录
+            </a>
+          </div>
         </div>
       </header>
 
       <main className="max-w-lg mx-auto px-4 py-6 space-y-5 pb-20">
-        {/* Welcome */}
         {!result && (
           <div className="text-center py-2">
             <p className="text-3xl mb-1">👋</p>
-            <h2 className="text-xl font-bold text-gray-800">你好！准备好了吗？</h2>
+            <h2 className="text-xl font-bold text-gray-800">自由练习</h2>
             <p className="text-sm text-gray-500 mt-1">录制你的英语口语，AI 将帮你评分并给出建议</p>
           </div>
         )}
 
-        {/* Form */}
         {!result && (
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Student info */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
               <h3 className="font-semibold text-gray-700">📋 基本信息</h3>
-
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-1.5">
                   姓名 <span className="text-red-400">*</span>
@@ -308,7 +784,6 @@ export default function StudentPage() {
                   required
                 />
               </div>
-
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-1.5">
                   班级 <span className="text-red-400">*</span>
@@ -324,7 +799,6 @@ export default function StudentPage() {
                 />
               </div>
 
-              {/* Assignment selector */}
               {assignments.length > 0 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-600 mb-1.5">
@@ -346,7 +820,6 @@ export default function StudentPage() {
                     const ptInfo = PART_TYPE_LABELS[selectedAssignmentObj.part_type] || PART_TYPE_LABELS.free
                     return (
                       <div className="mt-2 space-y-2">
-                        {/* Part type badge */}
                         <div className="flex items-center gap-2 bg-indigo-50 rounded-xl px-3 py-2">
                           <span className="text-base">{ptInfo.icon}</span>
                           <div className="min-w-0">
@@ -354,7 +827,6 @@ export default function StudentPage() {
                             <p className="text-xs text-indigo-400 mt-0.5">{ptInfo.desc}</p>
                           </div>
                         </div>
-                        {/* Reference text */}
                         {selectedAssignmentObj.reference_text && (
                           <div className="bg-blue-50 rounded-xl p-3 text-sm text-blue-700">
                             <p className="font-medium mb-1">📖 题目内容：</p>
@@ -368,24 +840,17 @@ export default function StudentPage() {
               )}
             </div>
 
-            {/* Audio input */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 space-y-4">
               <h3 className="font-semibold text-gray-700">🎤 录制或上传音频</h3>
-
               <div>
                 <p className="text-xs text-gray-500 mb-2">方式一：直接录音</p>
-                <AudioRecorder
-                  onAudioReady={handleRecordingReady}
-                  disabled={submitting}
-                />
+                <AudioRecorder onAudioReady={handleRecordingReady} disabled={submitting} />
               </div>
-
               <div className="flex items-center gap-3 text-gray-300">
                 <div className="flex-1 h-px bg-gray-100" />
                 <span className="text-xs">或</span>
                 <div className="flex-1 h-px bg-gray-100" />
               </div>
-
               <div>
                 <p className="text-xs text-gray-500 mb-2">方式二：上传音频文件</p>
                 <label className={`flex flex-col items-center justify-center gap-2 w-full py-5 px-4 border-2 border-dashed rounded-2xl cursor-pointer transition-colors
@@ -417,14 +882,12 @@ export default function StudentPage() {
               </div>
             </div>
 
-            {/* Progress */}
             {submitting && progressStep && (
               <div className="bg-white rounded-2xl shadow-sm border border-blue-100 p-5">
                 <ProgressBar step={progressStep} />
               </div>
             )}
 
-            {/* Error */}
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-700 rounded-2xl p-4 flex items-start gap-3">
                 <span className="text-xl shrink-0">⚠️</span>
@@ -435,7 +898,6 @@ export default function StudentPage() {
               </div>
             )}
 
-            {/* Submit */}
             <button
               type="submit"
               disabled={!canSubmit}
@@ -450,38 +912,188 @@ export default function StudentPage() {
           </form>
         )}
 
-        {/* ── Student history section (always visible once name entered) ── */}
-        {!result && (
-          <StudentHistorySection studentName={studentName} />
-        )}
+        {!result && <StudentHistorySection studentName={studentName} />}
 
-        {/* Results */}
         {result && (
           <div ref={resultRef} className="space-y-4 animate-fade-in">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-bold text-gray-800">评分报告</h2>
-              <button
-                onClick={handleReset}
-                className="text-sm text-blue-500 hover:text-blue-700 font-medium"
-              >
-                再练一次 →
+              <button onClick={handleReset} className="text-sm text-blue-500 hover:text-blue-700 font-medium">
+                再练一次 &rarr;
               </button>
             </div>
-            <GradeReport
-              result={result}
-              studentName={studentName}
-              className={className}
-            />
-            {/* Show updated history after submission */}
+            <GradeReport result={result} studentName={studentName} className={className} />
             <StudentHistorySection studentName={studentName} />
           </div>
         )}
       </main>
+    </div>
+  )
+}
 
-      {/* Footer */}
-      <footer className="text-center py-6 text-xs text-gray-400">
-        KET 英语口语智能评分系统 · Powered by OpenAI
-      </footer>
+// ── Main page (router) ──────────────────────────────────────────────────────
+
+export default function StudentPage() {
+  const [selectedClass, setSelectedClass] = useState(undefined) // undefined = not loaded yet
+  const [selectedHomework, setSelectedHomework] = useState(null)
+  const [mode, setMode] = useState('loading') // loading | classSelect | homeworkList | homework | free
+  const [studentName, setStudentName] = useState('')
+  const [nameConfirmed, setNameConfirmed] = useState(false)
+
+  // Load saved class from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('ket_selected_class')
+    if (saved) {
+      try {
+        const cls = JSON.parse(saved)
+        setSelectedClass(cls)
+        setMode('homeworkList')
+      } catch {
+        setMode('classSelect')
+      }
+    } else {
+      setMode('classSelect')
+    }
+
+    const savedName = localStorage.getItem('ket_student_name')
+    if (savedName) {
+      setStudentName(savedName)
+      setNameConfirmed(true)
+    }
+  }, [])
+
+  function handleClassSelect(cls) {
+    if (cls) {
+      setSelectedClass(cls)
+      localStorage.setItem('ket_selected_class', JSON.stringify(cls))
+      setMode('homeworkList')
+    } else {
+      setSelectedClass(null)
+      localStorage.removeItem('ket_selected_class')
+      setMode('free')
+    }
+  }
+
+  function handleChangeClass() {
+    localStorage.removeItem('ket_selected_class')
+    setSelectedClass(null)
+    setSelectedHomework(null)
+    setMode('classSelect')
+  }
+
+  function handleSelectHomework(hw) {
+    if (!nameConfirmed) {
+      // Need name first
+      setSelectedHomework(hw)
+      return
+    }
+    setSelectedHomework(hw)
+    setMode('homework')
+  }
+
+  function handleNameConfirm(name) {
+    setStudentName(name)
+    setNameConfirmed(true)
+    localStorage.setItem('ket_student_name', name)
+    setMode('homework')
+  }
+
+  if (mode === 'loading') {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-blue-50 to-slate-50 flex items-center justify-center">
+        <p className="text-gray-400">加载中…</p>
+      </div>
+    )
+  }
+
+  if (mode === 'classSelect') {
+    return <ClassSelectScreen onSelect={handleClassSelect} />
+  }
+
+  if (mode === 'free') {
+    return (
+      <FreePracticeScreen
+        onBack={() => setMode('classSelect')}
+        initialClass={selectedClass?.name || ''}
+      />
+    )
+  }
+
+  if (mode === 'homework' && selectedHomework && nameConfirmed) {
+    return (
+      <HomeworkPracticeScreen
+        homework={selectedHomework}
+        studentName={studentName}
+        onBack={() => { setSelectedHomework(null); setMode('homeworkList') }}
+      />
+    )
+  }
+
+  // homeworkList mode (or need name confirmation)
+  if (selectedHomework && !nameConfirmed) {
+    // Show name input overlay
+    return (
+      <NameInputScreen
+        onConfirm={handleNameConfirm}
+        onBack={() => setSelectedHomework(null)}
+      />
+    )
+  }
+
+  return (
+    <HomeworkListScreen
+      selectedClass={selectedClass}
+      onSelectHomework={handleSelectHomework}
+      onFreePractice={() => setMode('free')}
+      onChangeClass={handleChangeClass}
+    />
+  )
+}
+
+// ── Name input screen ───────────────────────────────────────────────────────
+
+function NameInputScreen({ onConfirm, onBack }) {
+  const [name, setName] = useState('')
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    if (name.trim()) onConfirm(name.trim())
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-blue-50 to-slate-50 flex items-center justify-center p-4">
+      <div className="w-full max-w-sm bg-white rounded-3xl shadow-lg p-8 space-y-6">
+        <div className="text-center">
+          <p className="text-4xl mb-2">👤</p>
+          <h2 className="text-xl font-bold text-gray-800">请输入你的姓名</h2>
+          <p className="text-sm text-gray-500 mt-1">用于记录你的练习成绩</p>
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="text"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="请输入姓名"
+            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:border-blue-400 focus:ring-2 focus:ring-blue-100 outline-none transition text-base text-center"
+            autoFocus
+            required
+          />
+          <button
+            type="submit"
+            disabled={!name.trim()}
+            className="w-full py-3 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-semibold rounded-xl transition-all active:scale-95"
+          >
+            开始练习
+          </button>
+          <button
+            type="button"
+            onClick={onBack}
+            className="w-full py-2 text-gray-400 hover:text-gray-600 text-sm transition"
+          >
+            返回
+          </button>
+        </form>
+      </div>
     </div>
   )
 }
